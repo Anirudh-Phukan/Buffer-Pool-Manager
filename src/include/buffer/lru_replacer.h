@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "buffer/replacer.h"
+#include <unordered_map>
 #include "common/config.h"
 
 namespace bustub {
