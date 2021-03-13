@@ -48,13 +48,11 @@ class LRUReplacer : public Replacer {
 
  private:
   // TODO(student): implement me!
-  using ListIterator = typename std::list<frame_id_t>::const_iterator;
-  using CacheMap = std::unordered_map<frame_id_t,ListIterator>;
 
   size_t num_pages;
-  std::list<frame_id_t> m_lruList;
-  CacheMap m_lruMap;
-  std::mutex m_lock;
+  std::list<frame_id_t> cacheList;
+  std::unordered_map<frame_id_t,std::list<frame_id_t>::const_iterator> cacheIndex;
+  std::mutex control;
 };
 
 }  // namespace bustub
