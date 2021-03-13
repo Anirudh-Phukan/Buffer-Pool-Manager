@@ -31,7 +31,7 @@ void LRUReplacer::Pin(frame_id_t frame_id) {
   std::lock_guard<std::mutex> guard(m_lock);
   if(m_lruMap.find(frame_id)==m_lruMap.end()) { return;}
   m_lruList.erase(m_lruMap[frame_id]);
-  m_lruMap.erase(frame_id);
+  m_lruMap.erase(frame_id);  
 }
 
 void LRUReplacer::Unpin(frame_id_t frame_id) {
