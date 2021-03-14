@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "buffer/replacer.h"
+#include <unordered_map>
 #include "common/config.h"
 
 namespace bustub {
@@ -47,6 +48,11 @@ class LRUReplacer : public Replacer {
 
  private:
   // TODO(student): implement me!
+
+  size_t num_pages;
+  std::list<frame_id_t> cacheList;
+  std::unordered_map<frame_id_t,std::list<frame_id_t>::const_iterator> cacheIndex;
+  std::mutex control;
 };
 
 }  // namespace bustub

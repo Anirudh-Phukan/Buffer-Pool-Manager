@@ -14,16 +14,39 @@
 
 namespace bustub {
 
-LRUReplacer::LRUReplacer(size_t num_pages) {}
+LRUReplacer::LRUReplacer(size_t num_pages) {
+  cacheIndex.reserve(this->num_pages);
+}
 
 LRUReplacer::~LRUReplacer() = default;
 
-bool LRUReplacer::Victim(frame_id_t *frame_id) { return false; }
+bool LRUReplacer::Victim(frame_id_t *frame_id) {
+  std::lock_guard<std::mutex> guard(control);
+  if(Size()!=0) { 
+  	*frame_id = cacheList.back();
+  	cacheList.pop_back();
+  	cacheIndex.erase(*frame_id);
+  	return true;
+  }
+  return false;
+}
 
-void LRUReplacer::Pin(frame_id_t frame_id) {}
+void LRUReplacer::Pin(frame_id_t frame_id) {
+  std::lock_guard<std::mutex> guard(control);
+  if(cacheIndex.find(frame_id)!=cacheIndex.end()) { 
+  	cacheList.erase(cacheIndex[frame_id]);
+  	cacheIndex.erase(frame_id); 
+  } 
+}
 
-void LRUReplacer::Unpin(frame_id_t frame_id) {}
+void LRUReplacer::Unpin(frame_id_t frame_id) {
+  std::lock_guard<std::mutex> guard(control);
+  if(cacheIndex.find(frame_id)==cacheIndex.end()){
+  	cacheList.push_front(frame_id);
+    cacheIndex[frame_id] = cacheList.begin();
+  }
+}
 
-size_t LRUReplacer::Size() { return 0; }
+size_t LRUReplacer::Size() { return cacheIndex.size(); }
 
 }  // namespace bustub
