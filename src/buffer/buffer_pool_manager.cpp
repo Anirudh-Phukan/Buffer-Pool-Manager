@@ -103,19 +103,18 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
 }
 
 bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
-  // Make sure you call DiskManager::WritePage!
-  if (page_table_.find(page_id) == page_table_.end()) {
-    return false;
+  if (page_table_.find(page_id) != page_table_.end()) {
+  
+	  Page *p = &pages_[page_table_[page_id]];
+
+	  if (p->is_dirty_) { 
+		disk_manager_->WritePage(page_id, p->GetData()); 
+		p->is_dirty_ = false; 
+	  }
+	  
+	  return true;
   }
-
-  Page *pageToFlush = &pages_[page_table_[page_id]];
-
-  if (pageToFlush->is_dirty_) {
-    disk_manager_->WritePage(pageToFlush->page_id_, pageToFlush->GetData());
-    pageToFlush->is_dirty_ = false;
-  }
-
-  return true;
+	return false;
 }
 
 Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
