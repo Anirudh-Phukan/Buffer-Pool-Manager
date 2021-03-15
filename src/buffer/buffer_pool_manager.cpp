@@ -82,24 +82,20 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
 }
 
 bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
-  // TODO: think about whether we should add lock
-  latch_.lock();  // TODO: using 1 lock to lock everything could be blocking?
-  if (page_table_.find(page_id) == page_table_.end()) {
-    latch_.unlock();
+  std::lock_guard<std::mutex> guard(latch_);	 
+  if (page_table_.find(page_id) != page_table_.end()) {
+    Page *p = &pages_[page_table_[page_id]];
+    if(p->pin_count_ > 0){
+    	(p->pin_count_)--;
+    	p->is_dirty_ = is_dirty;
+    	if (p->pin_count_ == 0) {
+			replacer_->Unpin(page_table_[page_id]);
+	    }
+	    return true;
+    }
     return false;
   }
-  Page *pageToUnpin = &pages_[page_table_[page_id]];
-  if (pageToUnpin->pin_count_ <= 0) {
-    latch_.unlock();
-    return false;
-  }
-  pageToUnpin->pin_count_ -= 1;
-  pageToUnpin->is_dirty_ = is_dirty;
-  if (pageToUnpin->pin_count_ == 0) {
-    replacer_->Unpin(page_table_[page_id]);
-  }
-  latch_.unlock();
-  return true;
+  return false;
 }
 
 bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
