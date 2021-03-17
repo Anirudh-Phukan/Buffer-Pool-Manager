@@ -37,13 +37,12 @@ BufferPoolManager::~BufferPoolManager() {
 Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   // 1.     Search the page table for the requested page (P).
   // 1.1    If P exists, pin it and return it immediately.
-  latch_.lock();  // TODO could use a scoped lock to reduce the chance of not having an unlock call
+  std::lock_guard<std::mutex> guard(latch_);
   frame_id_t free_frame_id = -1;
   if (page_table_.find(page_id) != page_table_.end()) {
     free_frame_id = page_table_[page_id];
     replacer_->Pin(free_frame_id);
     pages_[free_frame_id].pin_count_ += 1;
-    latch_.unlock();
     return &pages_[free_frame_id];
   }
 
@@ -54,7 +53,6 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
     free_list_.pop_front();
   } else {
     if (!replacer_->Victim(&free_frame_id)) {
-      latch_.unlock();
       return nullptr;
     }
     // 2.     If R is dirty, write it back to the disk.
@@ -77,7 +75,6 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   pages_[free_frame_id].pin_count_ = 1;
   replacer_->Pin(free_frame_id);
 
-  latch_.unlock();
   return &pages_[free_frame_id];
 }
 
