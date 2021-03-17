@@ -35,47 +35,56 @@ BufferPoolManager::~BufferPoolManager() {
 }
 
 Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
+  std::lock_guard<std::mutex> guard(latch_);
+
+  frame_id_t empty_frame;
+  
   // 1.     Search the page table for the requested page (P).
   // 1.1    If P exists, pin it and return it immediately.
-  std::lock_guard<std::mutex> guard(latch_);
-  frame_id_t free_frame_id = -1;
   if (page_table_.find(page_id) != page_table_.end()) {
-    free_frame_id = page_table_[page_id];
-    replacer_->Pin(free_frame_id);
-    pages_[free_frame_id].pin_count_ += 1;
-    return &pages_[free_frame_id];
+    empty_frame = page_table_[page_id];
+    replacer_->Pin(empty_frame);
+    pages_[empty_frame].pin_count_ += 1;
+    return &pages_[empty_frame];
   }
 
   // 1.2    If P does not exist, find a replacement page (R) from either the free list or the replacer.
   //        Note that pages are always found from the free list first.
   if (!free_list_.empty()) {
-    free_frame_id = free_list_.front();
+    empty_frame = free_list_.front();
     free_list_.pop_front();
-  } else {
-    if (!replacer_->Victim(&free_frame_id)) {
-      return nullptr;
+  } 
+  
+  else {
+    if (replacer_->Victim(&empty_frame)) {
+		
+		// 2.     If R is dirty, write it back to the disk.
+		Page *replacement = &pages_[empty_frame];
+		if (replacement->is_dirty_) {
+		  FlushPageImpl(replacement->page_id_);
+		  replacement->is_dirty_ = false;
+		}
+		
+		// 3.     Delete R from the page table and insert P.
+		page_table_.erase(replacement->page_id_);
     }
-    // 2.     If R is dirty, write it back to the disk.
-    Page *replacedPage = &pages_[free_frame_id];
-    if (replacedPage->is_dirty_) {
-      FlushPageImpl(replacedPage->page_id_);
-      replacedPage->is_dirty_ = false;
+    
+    else{
+    	return nullptr;
     }
-    // 3.     Delete R from the page table and insert P.
-    page_table_.erase(replacedPage->page_id_);
   }
 
   // 4   read in the page content from disk
-  pages_[free_frame_id].ResetMemory();
-  disk_manager_->ReadPage(page_id, pages_[free_frame_id].GetData());
+  pages_[empty_frame].ResetMemory();
+  disk_manager_->ReadPage(page_id, pages_[empty_frame].GetData());
 
   // 5  Update P's metadata, and then return a pointer to P.
-  pages_[free_frame_id].page_id_ = page_id;
-  page_table_.insert({page_id, free_frame_id});
-  pages_[free_frame_id].pin_count_ = 1;
-  replacer_->Pin(free_frame_id);
+  pages_[empty_frame].page_id_ = page_id;
+  page_table_.insert({page_id, empty_frame});
+  pages_[empty_frame].pin_count_ = 1;
+  replacer_->Pin(empty_frame);
 
-  return &pages_[free_frame_id];
+  return &pages_[empty_frame];
 }
 
 bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
