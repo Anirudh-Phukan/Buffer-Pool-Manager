@@ -59,14 +59,15 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
     if (replacer_->Victim(&empty_frame)) {
 		
 		// 2.     If R is dirty, write it back to the disk.
-		Page *replacement = &pages_[empty_frame];
-		if (replacement->is_dirty_) {
-		  FlushPageImpl(replacement->page_id_);
-		  replacement->is_dirty_ = false;
+		Page *p = &pages_[empty_frame];
+		
+		if (p->is_dirty_) {
+		  FlushPageImpl(p->page_id_);
+		  p->is_dirty_ = false;
 		}
 		
 		// 3.     Delete R from the page table and insert P.
-		page_table_.erase(replacement->page_id_);
+		page_table_.erase(p->page_id_);
     }
     
     else{
@@ -82,6 +83,7 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   pages_[empty_frame].page_id_ = page_id;
   page_table_.insert({page_id, empty_frame});
   pages_[empty_frame].pin_count_ = 1;
+  pages_[empty_frame].is_dirty_ = false;  
   replacer_->Pin(empty_frame);
 
   return &pages_[empty_frame];
@@ -125,37 +127,42 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
   // 2.   Pick a victim page P from either the free list or the replacer. Always pick from the free list first.
   // 3.   Update P's metadata, zero out memory and add P to the page table.
   // 4.   Set the page ID output parameter. Return a pointer to P.
-
-  latch_.lock();
-  frame_id_t free_frame_id = -1;
+  
+  std::lock_guard<std::mutex> guard(latch_);	
+  
+  frame_id_t empty_frame;
+  
   if (!free_list_.empty()) {
-    free_frame_id = free_list_.front();
+    empty_frame = free_list_.front();
     free_list_.pop_front();
   } else {
-    if (!replacer_->Victim(&free_frame_id)) {
-      latch_.unlock();
-      return nullptr;
+    if (replacer_->Victim(&empty_frame)) {
+    
+		Page *p = &pages_[empty_frame];
+		
+		if (p->is_dirty_) {
+		  FlushPageImpl(p->page_id_);
+		  p->is_dirty_ = false;
+		}
+		
+		page_table_.erase(p->page_id_);
     }
-
-    Page *replacedPage = &pages_[free_frame_id];
-    if (replacedPage->is_dirty_) {
-      FlushPageImpl(replacedPage->page_id_);
-      replacedPage->is_dirty_ = false;
+    else{
+    	return nullptr;
     }
-
-    page_table_.erase(replacedPage->page_id_);
   }
 
   *page_id = disk_manager_->AllocatePage();
-  pages_[free_frame_id].page_id_ = *page_id;
-  page_table_.insert({*page_id, free_frame_id});
-  pages_[free_frame_id].ResetMemory();
-  replacer_->Pin(free_frame_id);
-  pages_[free_frame_id].pin_count_ = 1;
-  pages_[free_frame_id].is_dirty_ = false;  // TODO: for a newly created page, what should we set the dirty bit to?
+  
+  pages_[empty_frame].page_id_ = *page_id; // Updating P metadata
+  pages_[empty_frame].ResetMemory(); // Zero out memory
+  page_table_.insert({*page_id, empty_frame}); // Adding P to the page table
+  
+  replacer_->Pin(empty_frame);
+  pages_[empty_frame].pin_count_ = 1;
+  pages_[empty_frame].is_dirty_ = false;  
 
-  latch_.unlock();
-  return &pages_[free_frame_id];
+  return &pages_[empty_frame];
 }
 
 bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
