@@ -107,8 +107,10 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
 }
 
 bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
+
   if (page_table_.find(page_id) != page_table_.end()) {
-  
+  	  
+  	  // The page has been found in the buffer pool manager	
 	  Page *p = &pages_[page_table_[page_id]];
 
 	  if (p->is_dirty_) { 
@@ -118,6 +120,7 @@ bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
 	  
 	  return true;
   }
+    // The page is not present in the buffer pool manager	
 	return false;
 }
 
@@ -197,8 +200,10 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
 }
 
 void BufferPoolManager::FlushAllPagesImpl() {
-  for (size_t i = 0; i < pool_size_; i++) {
-    FlushPageImpl(pages_[i].page_id_);
+  size_t ctr = 0;
+  while(ctr < pool_size_){
+  	FlushPageImpl(pages_[ctr].page_id_); // Flushing every page currently present in the buffer pool manager
+  	ctr++;
   }
 }
 
