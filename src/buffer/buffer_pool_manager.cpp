@@ -90,20 +90,31 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
 }
 
 bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
-  std::lock_guard<std::mutex> guard(latch_);	 
+
+  std::lock_guard<std::mutex> guard(latch_); // Lock applied as buffer pool is modified	 
+  
   if (page_table_.find(page_id) != page_table_.end()) {
+  
+    // The page is found in the buffer pool
     Page *p = &pages_[page_table_[page_id]];
+    
     if(p->pin_count_ > 0){
+    
     	(p->pin_count_)--;
     	p->is_dirty_ = is_dirty;
+    	
     	if (p->pin_count_ == 0) {
 			replacer_->Unpin(page_table_[page_id]);
 	    }
+	    
 	    return true;
     }
+    
     return false;
   }
-  return true;
+  
+  // The page is not present in the buffer pool manager
+  return false;
 }
 
 bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
@@ -120,6 +131,7 @@ bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
 	  
 	  return true;
   }
+  
     // The page is not present in the buffer pool manager	
 	return false;
 }
@@ -169,12 +181,14 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
 }
 
 bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
-  std::lock_guard<std::mutex> guard(latch_);
+
+  std::lock_guard<std::mutex> guard(latch_); // Lock applied as buffer pool is modified
+  
+  disk_manager_->DeallocatePage(page_id); // 0.   Make sure you call DiskManager::DeallocatePage!
   
   // 1.   Search the page table for the requested page (P).
   // 1.   If P does not exist, return true.
   if (page_table_.find(page_id) == page_table_.end()) {
-    disk_manager_->DeallocatePage(page_id);
     return true;
   }
   
@@ -195,7 +209,7 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   p->pin_count_ = 0;
   
   // Returning back to the free list
-  free_list_.emplace_back(page_table_[page_id]);
+  free_list_.push_back(page_table_[page_id]);
   return true;
 }
 
