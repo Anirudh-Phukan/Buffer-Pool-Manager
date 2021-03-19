@@ -35,22 +35,23 @@ BufferPoolManager::~BufferPoolManager() {
 }
 
 Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
-  std::lock_guard<std::mutex> guard(latch_);
+
+  std::lock_guard<std::mutex> guard(latch_); // Lock applied as buffer pool is modified	
 
   frame_id_t empty_frame;
   
-  // 1.     Search the page table for the requested page (P).
-  // 1.1    If P exists, pin it and return it immediately.
   if (page_table_.find(page_id) != page_table_.end()) {
+  
+    // Requested Page found in buffer pool
     empty_frame = page_table_[page_id];
     replacer_->Pin(empty_frame);
-    pages_[empty_frame].pin_count_ += 1;
+    (pages_[empty_frame].pin_count_)++;
     return &pages_[empty_frame];
   }
 
-  // 1.2    If P does not exist, find a replacement page (R) from either the free list or the replacer.
-  //        Note that pages are always found from the free list first.
   if (!free_list_.empty()) {
+  
+    // Found empty frame in free list
     empty_frame = free_list_.front();
     free_list_.pop_front();
   } 
@@ -58,7 +59,7 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   else {
     if (replacer_->Victim(&empty_frame)) {
 		
-		// 2.     If R is dirty, write it back to the disk.
+		// Found replacement in LRU replacer
 		Page *p = &pages_[empty_frame];
 		
 		if (p->is_dirty_) {
@@ -66,26 +67,28 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
 		  p->is_dirty_ = false;
 		}
 		
-		// 3.     Delete R from the page table and insert P.
 		page_table_.erase(p->page_id_);
     }
     
     else{
+    
+    	// Could not find a replacement
     	return nullptr;
     }
   }
 
-  // 4   read in the page content from disk
   pages_[empty_frame].ResetMemory();
-  disk_manager_->ReadPage(page_id, pages_[empty_frame].GetData());
-
-  // 5  Update P's metadata, and then return a pointer to P.
+  disk_manager_->ReadPage(page_id, pages_[empty_frame].GetData()); // Reading data from disk
+ 
+  // Updating P's metadata
   pages_[empty_frame].page_id_ = page_id;
-  page_table_.insert({page_id, empty_frame});
-  pages_[empty_frame].pin_count_ = 1;
-  pages_[empty_frame].is_dirty_ = false;  
   replacer_->Pin(empty_frame);
-
+  pages_[empty_frame].pin_count_ = 1;
+  pages_[empty_frame].is_dirty_ = false;
+  
+  page_table_.insert({page_id, empty_frame}); // Inserting P in the buffer pool
+    
+  // Pointer to requested page
   return &pages_[empty_frame];
 }
 
@@ -137,22 +140,22 @@ bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
 }
 
 Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
-  // 0.   Make sure you call DiskManager::AllocatePage!
-  // 1.   If all the pages in the buffer pool are pinned, return nullptr.
-  // 2.   Pick a victim page P from either the free list or the replacer. Always pick from the free list first.
-  // 3.   Update P's metadata, zero out memory and add P to the page table.
-  // 4.   Set the page ID output parameter. Return a pointer to P.
   
-  std::lock_guard<std::mutex> guard(latch_);	
+  std::lock_guard<std::mutex> guard(latch_); // Lock applied as buffer pool is modified
+  
+  *page_id = disk_manager_->AllocatePage();	// 0.   Make sure you call DiskManager::AllocatePage!
   
   frame_id_t empty_frame;
   
   if (!free_list_.empty()) {
+  
+    // Found empty frame in the free list
     empty_frame = free_list_.front();
     free_list_.pop_front();
   } else {
     if (replacer_->Victim(&empty_frame)) {
-    
+    	
+    	// Found replacement in the LRU replacer
 		Page *p = &pages_[empty_frame];
 		
 		if (p->is_dirty_) {
@@ -163,20 +166,23 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
 		page_table_.erase(p->page_id_);
     }
     else{
+    	
+    	// Could not find a replacement
     	return nullptr;
     }
   }
-
-  *page_id = disk_manager_->AllocatePage();
   
-  pages_[empty_frame].page_id_ = *page_id; // Updating P metadata
+  // Updating P's metadata
+  pages_[empty_frame].page_id_ = *page_id; 
+  replacer_->Pin(empty_frame);
+  pages_[empty_frame].pin_count_ = 1;
+  pages_[empty_frame].is_dirty_ = false;
+  
   pages_[empty_frame].ResetMemory(); // Zero out memory
   page_table_.insert({*page_id, empty_frame}); // Adding P to the page table
   
-  replacer_->Pin(empty_frame);
-  pages_[empty_frame].pin_count_ = 1;
-  pages_[empty_frame].is_dirty_ = false;  
-
+    
+  // 4.   Set the page ID output parameter. Return a pointer to P.
   return &pages_[empty_frame];
 }
 
