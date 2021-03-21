@@ -21,8 +21,12 @@ LRUReplacer::LRUReplacer(size_t num_pages) {
 LRUReplacer::~LRUReplacer() = default;
 
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
-  std::lock_guard<std::mutex> guard(control);
-  if(Size()!=0) { 
+
+  std::lock_guard<std::mutex> guard(control); // Lock applied as changes are made to internal data structures
+  
+  if(cacheIndex.size()!=0) {
+   
+    // The cache is not empty
   	*frame_id = cacheList.back();
   	cacheList.pop_back();
   	cacheIndex.erase(*frame_id);
@@ -32,16 +36,24 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
 }
 
 void LRUReplacer::Pin(frame_id_t frame_id) {
-  std::lock_guard<std::mutex> guard(control);
-  if(cacheIndex.find(frame_id)!=cacheIndex.end()) { 
+
+  std::lock_guard<std::mutex> guard(control); // Lock applied as changes are made to internal data structures
+  
+  if(cacheIndex.find(frame_id)!=cacheIndex.end()) {
+  
+  	// Frame is present in the cache 
   	cacheList.erase(cacheIndex[frame_id]);
   	cacheIndex.erase(frame_id); 
   } 
 }
 
 void LRUReplacer::Unpin(frame_id_t frame_id) {
-  std::lock_guard<std::mutex> guard(control);
+
+  std::lock_guard<std::mutex> guard(control); // Lock applied as changes are made to internal data structures
+  
   if(cacheIndex.find(frame_id)==cacheIndex.end()){
+  
+  	// Frame is not present in the cache
   	cacheList.push_front(frame_id);
     cacheIndex[frame_id] = cacheList.begin();
   }
